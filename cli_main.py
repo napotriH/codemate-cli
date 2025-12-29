@@ -53,6 +53,10 @@ def main():
     console.print("• [blue]/preview <file>[/blue] - Preview HTML/Markdown/JSON")
     console.print("• [blue]/check <file>[/blue] - Real-time syntax checking")
     console.print("• [blue]/monitor <file> [seconds][/blue] - Monitor file changes (default: 30s)")
+    console.print("\n[bold purple]Version Control:[/bold purple]")
+    console.print("• [purple]/undo <file>[/purple] - Undo last changes to file")
+    console.print("• [purple]/history <file>[/purple] - Show file modification history")
+    console.print("• [purple]/restore <file> <version>[/purple] - Restore specific version")
     console.print("\n[dim]Commands: /clear (reset), /quit (exit)[/dim]\n")
     
     try:
@@ -149,6 +153,22 @@ def main():
                 filepath = parts[0]
                 duration = int(parts[1]) if len(parts) > 1 else 30
                 agent.live_file_monitor(filepath, duration)
+                continue
+            elif user_input.lower().startswith('/undo '):
+                filepath = user_input[6:].strip()
+                agent.undo_file_changes(filepath)
+                continue
+            elif user_input.lower().startswith('/history '):
+                filepath = user_input[9:].strip()
+                agent.show_file_history(filepath)
+                continue
+            elif user_input.lower().startswith('/restore '):
+                parts = user_input[9:].split()
+                if len(parts) >= 2:
+                    filepath, version = parts[0], int(parts[1])
+                    agent.restore_file_version(filepath, version)
+                else:
+                    console.print("[yellow]Usage: /restore <file> <version_number>[/yellow]")
                 continue
             
             console.print("\n[bold magenta]CodeMate[/bold magenta]:")
