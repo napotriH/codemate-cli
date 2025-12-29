@@ -21,6 +21,7 @@ class CLIAgent:
         self.model = "kwaipilot/kat-coder-pro:free"
         self.base_url = "https://openrouter.ai/api/v1/chat/completions"
         self.conversation = []
+        self.file_history = {}  # Istoric modificari fisiere
         
     def get_workspace_context(self):
         """Obtine contextul complet si inteligent al workspace-ului"""
@@ -99,11 +100,14 @@ Available files: {', '.join(files[:15])}
             return f"Error reading {filepath}: {e}"
     
     def write_file(self, filepath, content):
-        """Scrie un fisier si arata diff-ul"""
+        """Scrie un fisier si arata diff-ul cu backup automat"""
         old_content = ""
         if os.path.exists(filepath):
             with open(filepath, 'r', encoding='utf-8') as f:
                 old_content = f.read()
+            
+            # Salveaza backup pentru undo
+            self._save_backup(filepath, old_content)
         
         try:
             # Creeaza directorul daca nu exista
@@ -117,6 +121,103 @@ Available files: {', '.join(files[:15])}
             return True
         except Exception as e:
             console.print(f"[red]Error writing {filepath}: {e}[/red]")
+            return False
+    
+    def _save_backup(self, filepath, content):
+        """Salveaza backup pentru undo"""
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        if filepath not in self.file_history:
+            self.file_history[filepath] = []
+        
+        # Pastreaza ultimele 5 versiuni
+        self.file_history[filepath].append({
+            'content': content,
+            'timestamp': timestamp
+        })
+        
+        if len(self.file_history[filepath]) > 5:
+            self.file_history[filepath].pop(0)
+    
+    def undo_file_changes(self, filepath):
+        """Anuleaza ultima modificare a fisierului"""
+        if filepath not in self.file_history or not self.file_history[filepath]:
+            console.print(f"[yellow]No backup found for {filepath}[/yellow]")
+            return False
+        
+        # Ia ultima versiune din istoric
+        last_backup = self.file_history[filepath][-1]
+        
+        try:
+            # Salveaza versiunea curenta inainte de undo
+            if os.path.exists(filepath):
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    current_content = f.read()
+            else:
+                current_content = ""
+            
+            # Restaureaza versiunea anterioara
+            with open(filepath, 'w', encoding='utf-8') as f:
+                f.write(last_backup['content'])
+            
+            # Arata ce s-a schimbat
+            self.show_diff(filepath, current_content, last_backup['content'])
+            
+            # Sterge din istoric (nu mai poate face undo la aceasta)
+            self.file_history[filepath].pop()
+            
+            console.print(f"[green]✅ Reverted {filepath} to version from {last_backup['timestamp']}[/green]")
+            return True
+            
+        except Exception as e:
+            console.print(f"[red]Error reverting {filepath}: {e}[/red]")
+            return False
+    
+    def show_file_history(self, filepath):
+        """Afiseaza istoricul modificarilor pentru un fisier"""
+        if filepath not in self.file_history or not self.file_history[filepath]:
+            console.print(f"[yellow]No history found for {filepath}[/yellow]")
+            return
+        
+        table = Table(title=f"File History: {filepath}")
+        table.add_column("Version", style="cyan")
+        table.add_column("Timestamp", style="green")
+        table.add_column("Size", style="magenta")
+        
+        for i, backup in enumerate(self.file_history[filepath], 1):
+            size = f"{len(backup['content'])} chars"
+            table.add_row(str(i), backup['timestamp'], size)
+        
+        console.print(table)
+    
+    def restore_file_version(self, filepath, version_index):
+        """Restaureaza o versiune specifica din istoric"""
+        if filepath not in self.file_history or not self.file_history[filepath]:
+            console.print(f"[yellow]No history found for {filepath}[/yellow]")
+            return False
+        
+        if version_index < 1 or version_index > len(self.file_history[filepath]):
+            console.print(f"[red]Invalid version index. Available: 1-{len(self.file_history[filepath])}[/red]")
+            return False
+        
+        backup = self.file_history[filepath][version_index - 1]
+        
+        try:
+            # Salveaza versiunea curenta
+            if os.path.exists(filepath):
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    current_content = f.read()
+                self._save_backup(filepath, current_content)
+            
+            # Restaureaza versiunea selectata
+            with open(filepath, 'w', encoding='utf-8') as f:
+                f.write(backup['content'])
+            
+            console.print(f"[green]✅ Restored {filepath} to version {version_index} ({backup['timestamp']})[/green]")
+            return True
+            
+        except Exception as e:
+            console.print(f"[red]Error restoring {filepath}: {e}[/red]")
             return False
     
     def show_diff(self, filepath, old_content, new_content):
