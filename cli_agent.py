@@ -17,11 +17,41 @@ console = Console()
 
 class CLIAgent:
     def __init__(self):
-        self.api_key = "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"
+        # Încarcă API key
+        self.api_key = self._load_api_key()
+        
+        # Dacă cheia lipsește, afișăm o alertă clară
+        if not self.api_key:
+            console.print("[bold red]ATENȚIE:[/bold red] API Key nu a fost detectat în .codemate_config!")
+        else:
+            console.print(f"[green]✅ API Key încărcat: {self.api_key[:8]}...[/green]")
+            
         self.model = "kwaipilot/kat-coder-pro:free"
         self.base_url = "https://openrouter.ai/api/v1/chat/completions"
         self.conversation = []
-        self.file_history = {}  # Istoric modificari fisiere
+        self.file_history = {}
+    
+    def _load_api_key(self):
+        """Încarcă API key din surse multiple cu parsare robustă"""
+        # 1. Verifică variabila de mediu
+        api_key = os.getenv('API_KEY')
+        if api_key:
+            return api_key
+        
+        # 2. Verifică fișierul config local (.codemate_config)
+        config_file = '.codemate_config'
+        if os.path.exists(config_file):
+            try:
+                with open(config_file, 'r') as f:
+                    content = f.read()
+                    # Folosim Regex pentru a găsi cheia chiar dacă există spații (ex: API_KEY = sk-...)
+                    match = re.search(r'(?:API_KEY|AM_API_KEY)\s*=\s*([^\s\n\r]+)', content)
+                    if match:
+                        return match.group(1).strip()
+            except Exception as e:
+                console.print(f"[dim red]Eroare la citirea fișierului config: {e}[/dim red]")
+        
+        return None
         
     def get_workspace_context(self):
         """Obtine contextul complet si inteligent al workspace-ului"""
